@@ -9,6 +9,8 @@ from django.utils.translation import ugettext_lazy as _
 from django.template import Context, loader
 from django.template.loader import render_to_string
 
+from django.core.mail import EmailMultiAlternatives
+
 # favour django-mailer but fall back to django.core.mail
 
 if "mailer" in settings.INSTALLED_APPS:
@@ -33,7 +35,7 @@ def format_quote(sender, body):
 
 def new_message_email(sender, instance, signal, 
         subject_prefix=_(u'New Message: %(subject)s'),
-        template_name="django_messages/new_message.html",
+        template_name="django_messages/new_message",
         default_protocol=None,
         *args, **kwargs):
     """
@@ -50,13 +52,17 @@ def new_message_email(sender, instance, signal,
         try:
             current_domain = Site.objects.get_current().domain
             subject = subject_prefix % {'subject': instance.subject}
-            message = render_to_string(template_name, {
+            context = {
                 'site_url': '%s://%s' % (default_protocol, current_domain),
                 'message': instance,
-            })
+            }
+            text_content = render_to_string("%s.txt" % template_name, context)
+            html_content = render_to_string("%s.html" % template_name, context)
             if instance.recipient.email != "":
-                send_mail(subject, message, settings.DEFAULT_FROM_EMAIL,
-                    [instance.recipient.email,])
+                message = EmailMultiAlternatives(subject, text_content, settings.DEFAULT_FROM_EMAIL, [instance.recipient.email,])
+                message.attach_alternative(html_content, "text/html")
+                message.send()
+
         except Exception, e:
             #print e
             pass #fail silently
